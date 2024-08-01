@@ -1,17 +1,22 @@
 import streamlit as st
 import openai
-import requests
+from dotenv import load_dotenv
+import os
+import streamlit.components.v1 as components
+import tempfile
 
-# Set your OpenAI API key
-openai.api_key = 'YOUR_OPENAI_API_KEY'
+# Load environment variables from .env file
+load_dotenv()
 
-def generate_content(prompt):
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=500
+# Get the OpenAI API key from environment variables
+openai.api_key = os.getenv('OPENAI_API_KEY')
+
+def generate_content(prompt, content_type):
+    response = openai.ChatCompletion.create(
+        model="gpt-4",  # or use "gpt-3.5-turbo"
+        messages=[{"role": "user", "content": f"Generate a {content_type}: {prompt}"}]
     )
-    return response.choices[0].text.strip()
+    return response.choices[0].message['content'].strip()
 
 def generate_image(description):
     response = openai.Image.create(
@@ -33,12 +38,20 @@ def generate_html(content, headings, images):
 # Streamlit UI
 st.title("AI-Powered Content Generator")
 
+# Dropdown to select content type
+content_type = st.selectbox("Select Content Type:", ["Article", "Blog Post", "Report", "Story"])
+
+# Text area for entering the prompt
 prompt = st.text_area("Enter a Prompt:", height=150)
 
 if st.button("Generate Content"):
     with st.spinner("Generating content..."):
-        content = generate_content(prompt)
-        headings = generate_content(f"Summarize the following content into headings:\n\n{content}").split('\n')
+        content = generate_content(prompt, content_type)
+        
+        # Summarize content into headings
+        headings_summary = generate_content(f"Summarize the following content into headings:\n\n{content}", content_type)
+        headings = headings_summary.split('\n')[:4]  # Limit to 4 headings
+
         images = [generate_image(heading) for heading in headings]
 
         st.subheader("Generated Headings and Images:")
@@ -57,3 +70,12 @@ if st.button("Generate Content"):
             file_name="generated_content.html",
             mime="text/html"
         )
+
+        # Save HTML content to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
+            tmp_file.write(html_content.encode('utf-8'))
+            tmp_file_path = tmp_file.name
+        
+        # Load HTML content in an iframe
+        st.subheader("Preview Generated HTML")
+        components.iframe(f'file://{tmp_file_path}', height=600, scrolling=True)
